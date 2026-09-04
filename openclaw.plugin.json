@@ -1,0 +1,57 @@
+{
+  "id": "max",
+  "name": "MAX",
+  "description": "Канал мессенджера MAX (platform-api.max.ru) для OpenClaw",
+  "channels": ["max"],
+  "activation": {
+    "onStartup": false
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  },
+  "channelConfigs": {
+    "max": {
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": { "type": "boolean" },
+          "token": { "type": "string" },
+          "tokenFile": { "type": "string" },
+          "apiBaseUrl": { "type": "string" },
+          "dmPolicy": { "type": "string", "enum": ["pairing", "allowlist", "open", "disabled"] },
+          "allowFrom": { "type": "array", "items": { "type": "string" } },
+          "groupPolicy": { "type": "string", "enum": ["allowlist", "open", "disabled"] },
+          "pollTimeoutSec": { "type": "integer", "minimum": 1, "maximum": 90 },
+          "pollLimit": { "type": "integer", "minimum": 1, "maximum": 1000 },
+          "defaultAccount": { "type": "string" },
+          "accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": { "type": "boolean" },
+                "token": { "type": "string" },
+                "tokenFile": { "type": "string" },
+                "apiBaseUrl": { "type": "string" },
+                "dmPolicy": { "type": "string", "enum": ["pairing", "allowlist", "open", "disabled"] },
+                "allowFrom": { "type": "array", "items": { "type": "string" } },
+                "groupPolicy": { "type": "string", "enum": ["allowlist", "open", "disabled"] },
+                "pollTimeoutSec": { "type": "integer", "minimum": 1, "maximum": 90 },
+                "pollLimit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+              }
+            }
+          }
+        }
+      },
+      "uiHints": {
+        "token": { "label": "Токен бота MAX", "sensitive": true },
+        "tokenFile": { "label": "Файл с токеном (предпочтительно)" },
+        "allowFrom": { "label": "Кому разрешено писать боту (user_id)" }
+      }
+    }
+  }
+}
