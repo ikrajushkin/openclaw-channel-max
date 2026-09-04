@@ -79,7 +79,22 @@ export async function runMaxPoller(params: MaxPollerParams): Promise<void> {
 
       for (const update of res.updates ?? []) {
         if (abortSignal.aborted) break;
-        if (update.update_type !== "message_created") continue;
+        if (update.update_type !== "message_created") {
+          log?.info?.(
+            `max[${accountId}]: событие ${update.update_type} не обрабатывается`,
+          );
+          continue;
+        }
+
+        // Голосовые MAX присылает как message_created вообще без поля message:
+        // ни отправителя, ни чата, ни вложения. Ответить тоже некуда.
+        if (!update.message) {
+          log?.warn?.(
+            `max[${accountId}]: событие без тела сообщения — так MAX присылает` +
+              " голосовые; содержимое боту недоступно, отвечать некуда",
+          );
+          continue;
+        }
 
         const mid = update.message?.body?.mid;
         if (mid) {

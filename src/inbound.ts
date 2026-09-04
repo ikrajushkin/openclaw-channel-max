@@ -86,22 +86,45 @@ export async function handleMaxMessage(
   const sender = message?.sender;
   const text = message?.body?.text?.trim() ?? "";
 
-  if (!message || !sender?.user_id) return false;
-  if (sender.is_bot || (params.botUserId && sender.user_id === params.botUserId)) {
+  if (!message || !sender?.user_id) {
+    log?.warn?.("max: сообщение без отправителя, пропуск");
     return false;
   }
-  if (!text) {
-    // Вложения появятся во второй фазе; сейчас честно молчим, а не эхо-отвечаем.
-    // Форму вложений документация MAX не описывает — печатаем сырой JSON,
-    // чтобы узнать её эмпирически.
-    log?.info?.(
-      `max: сообщение без текста от ${sender.user_id};` +
-        ` attachments=${JSON.stringify(message.body?.attachments ?? null)}`,
-    );
+  if (sender.is_bot || (params.botUserId && sender.user_id === params.botUserId)) {
     return false;
   }
 
   const senderId = String(sender.user_id);
+  const attachments = message.body?.attachments ?? [];
+
+  if (!text) {
+    if (attachments.length === 0) {
+      log?.info?.(`max: пустое сообщение от ${senderId}, пропуск`);
+      return false;
+    }
+    // Вложения ещё не обрабатываются, но молчать в ответ хуже, чем сказать прямо.
+    if (!isSenderAllowed(account, senderId)) return false;
+    const target = resolveSendTarget(update, params.botUserId);
+    if (!target) return false;
+    const what = attachments
+      .map((a) => a.filename ?? a.type)
+      .filter(Boolean)
+      .join(", ");
+    log?.info?.(
+      `max: вложения от ${senderId} без текста (${attachments
+        .map((a) => a.type)
+        .join(", ")}), обработка пока не поддержана`,
+    );
+    await client.sendText({
+      target,
+      text:
+        `Вложения я пока не обрабатываю (${what}). ` +
+        "Опишите словами, что нужно сделать, или пришлите текстом.",
+      signal: params.signal,
+    });
+    return false;
+  }
+
   if (!isSenderAllowed(account, senderId)) {
     log?.warn?.(
       `max: отправитель ${senderId} отклонён политикой ${account.dmPolicy}`,

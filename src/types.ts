@@ -15,9 +15,26 @@ export type MaxRecipient = {
   user_id?: number;
 };
 
+/**
+ * Вложение входящего сообщения.
+ *
+ * Формы, подтверждённые на живом боте (документация MAX их не описывает):
+ *   image: payload = { photo_id, token, url }
+ *   file:  filename, size, payload = { fileId, token, url (со сроком годности) }
+ *
+ * `payload.url` — прямая ссылка, её достаточно для скачивания.
+ */
 export type MaxAttachment = {
   type: string;
-  payload?: Record<string, unknown>;
+  filename?: string;
+  size?: number;
+  payload?: {
+    url?: string;
+    token?: string;
+    photo_id?: number;
+    fileId?: number;
+    [key: string]: unknown;
+  };
 };
 
 export type MaxMessageBody = {
