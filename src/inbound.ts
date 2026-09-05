@@ -2,6 +2,7 @@ import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/channel-
 import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 import { chunkText, MaxClient } from "./client.js";
 import { MAX_CHANNEL_ID, type MaxResolvedAccount } from "./config.js";
+import { downloadAttachments, toLegacyMediaContext } from "./media.js";
 import { getMaxRuntime } from "./runtime-store.js";
 import type { MaxSendTarget, MaxUpdate } from "./types.js";
 
@@ -97,31 +98,8 @@ export async function handleMaxMessage(
   const senderId = String(sender.user_id);
   const attachments = message.body?.attachments ?? [];
 
-  if (!text) {
-    if (attachments.length === 0) {
-      log?.info?.(`max: пустое сообщение от ${senderId}, пропуск`);
-      return false;
-    }
-    // Вложения ещё не обрабатываются, но молчать в ответ хуже, чем сказать прямо.
-    if (!isSenderAllowed(account, senderId)) return false;
-    const target = resolveSendTarget(update, params.botUserId);
-    if (!target) return false;
-    const what = attachments
-      .map((a) => a.filename ?? a.type)
-      .filter(Boolean)
-      .join(", ");
-    log?.info?.(
-      `max: вложения от ${senderId} без текста (${attachments
-        .map((a) => a.type)
-        .join(", ")}), обработка пока не поддержана`,
-    );
-    await client.sendText({
-      target,
-      text:
-        `Вложения я пока не обрабатываю (${what}). ` +
-        "Опишите словами, что нужно сделать, или пришлите текстом.",
-      signal: params.signal,
-    });
+  if (!text && attachments.length === 0) {
+    log?.info?.(`max: пустое сообщение от ${senderId}, пропуск`);
     return false;
   }
 
@@ -146,6 +124,34 @@ export async function handleMaxMessage(
 
   const mid = message.body.mid;
 
+  const media = attachments.length
+    ? await downloadAttachments({
+        attachments,
+        signal: params.signal,
+        onError: (attachment, err) =>
+          log?.warn?.(
+            `max: вложение ${attachment.type} не скачалось: ${String(err)}`,
+          ),
+      })
+    : [];
+
+  if (attachments.length && media.length === 0) {
+    log?.warn?.(`max: ни одно вложение от ${senderId} не скачалось`);
+    await client.sendText({
+      target,
+      text: "Не удалось забрать вложение — попробуйте прислать ещё раз.",
+      signal: params.signal,
+    });
+    return false;
+  }
+
+  if (media.length) {
+    log?.info?.(
+      `max: скачано вложений ${media.length}: ` +
+        media.map((m) => `${m.maxType}/${m.contentType ?? "?"}`).join(", "),
+    );
+  }
+
   await dispatchInboundDirectDmWithRuntime({
     runtime: getMaxRuntime(),
     cfg,
@@ -162,6 +168,7 @@ export async function handleMaxMessage(
     timestamp: message.timestamp ?? update.timestamp,
     inboundAccessAuthorized: true,
     channelIngress: "unsupported",
+    extraContext: toLegacyMediaContext(media),
     deliver: async (payload) => {
       const outText = payload.text?.trim();
       if (!outText) return;

@@ -72,5 +72,12 @@ export type MaxSendResult = {
   message?: MaxMessage;
 };
 
+export type MaxSubscription = {
+  url: string;
+  time?: number;
+  update_types?: string[] | null;
+  version?: string;
+};
+
 /** Целевой адрес отправки: MAX различает диалог с пользователем и чат. */
 export type MaxSendTarget = { userId: number } | { chatId: number };

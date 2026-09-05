@@ -1,6 +1,7 @@
 import type {
   MaxSendResult,
   MaxSendTarget,
+  MaxSubscription,
   MaxUpdatesResponse,
   MaxUser,
 } from "./types.js";
@@ -121,6 +122,46 @@ export class MaxClient {
         types: params.types?.length ? params.types.join(",") : undefined,
       },
       signal: params.signal,
+    });
+  }
+
+  /** Действующие подписки на вебхук. */
+  async listSubscriptions(signal?: AbortSignal): Promise<MaxSubscription[]> {
+    const res = await this.request<{ subscriptions?: MaxSubscription[] }>({
+      method: "GET",
+      path: "/subscriptions",
+      signal,
+    });
+    return res.subscriptions ?? [];
+  }
+
+  /**
+   * Подписаться на вебхук.
+   *
+   * MAX подписки **копит, а не заменяет**: перед регистрацией новой старые
+   * нужно снимать самому, иначе события начнут дублироваться.
+   */
+  subscribe(params: {
+    url: string;
+    updateTypes?: string[];
+    signal?: AbortSignal;
+  }): Promise<unknown> {
+    const body: Record<string, unknown> = { url: params.url };
+    if (params.updateTypes?.length) body.update_types = params.updateTypes;
+    return this.request<unknown>({
+      method: "POST",
+      path: "/subscriptions",
+      body,
+      signal: params.signal,
+    });
+  }
+
+  unsubscribe(url: string, signal?: AbortSignal): Promise<unknown> {
+    return this.request<unknown>({
+      method: "DELETE",
+      path: "/subscriptions",
+      query: { url },
+      signal,
     });
   }
 

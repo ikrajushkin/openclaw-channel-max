@@ -2,7 +2,9 @@
   "id": "max",
   "name": "MAX",
   "description": "Канал мессенджера MAX (platform-api.max.ru) для OpenClaw",
-  "channels": ["max"],
+  "channels": [
+    "max"
+  ],
   "activation": {
     "onStartup": false
   },
@@ -17,40 +19,132 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "enabled": { "type": "boolean" },
-          "token": { "type": "string" },
-          "tokenFile": { "type": "string" },
-          "apiBaseUrl": { "type": "string" },
-          "dmPolicy": { "type": "string", "enum": ["pairing", "allowlist", "open", "disabled"] },
-          "allowFrom": { "type": "array", "items": { "type": "string" } },
-          "groupPolicy": { "type": "string", "enum": ["allowlist", "open", "disabled"] },
-          "pollTimeoutSec": { "type": "integer", "minimum": 1, "maximum": 90 },
-          "pollLimit": { "type": "integer", "minimum": 1, "maximum": 1000 },
-          "defaultAccount": { "type": "string" },
+          "enabled": {
+            "type": "boolean"
+          },
+          "token": {
+            "type": "string"
+          },
+          "tokenFile": {
+            "type": "string"
+          },
+          "apiBaseUrl": {
+            "type": "string"
+          },
+          "dmPolicy": {
+            "type": "string",
+            "enum": [
+              "pairing",
+              "allowlist",
+              "open",
+              "disabled"
+            ]
+          },
+          "allowFrom": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "groupPolicy": {
+            "type": "string",
+            "enum": [
+              "allowlist",
+              "open",
+              "disabled"
+            ]
+          },
+          "pollTimeoutSec": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 90
+          },
+          "pollLimit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "defaultAccount": {
+            "type": "string"
+          },
           "accounts": {
             "type": "object",
             "additionalProperties": {
               "type": "object",
               "additionalProperties": false,
               "properties": {
-                "enabled": { "type": "boolean" },
-                "token": { "type": "string" },
-                "tokenFile": { "type": "string" },
-                "apiBaseUrl": { "type": "string" },
-                "dmPolicy": { "type": "string", "enum": ["pairing", "allowlist", "open", "disabled"] },
-                "allowFrom": { "type": "array", "items": { "type": "string" } },
-                "groupPolicy": { "type": "string", "enum": ["allowlist", "open", "disabled"] },
-                "pollTimeoutSec": { "type": "integer", "minimum": 1, "maximum": 90 },
-                "pollLimit": { "type": "integer", "minimum": 1, "maximum": 1000 }
+                "enabled": {
+                  "type": "boolean"
+                },
+                "token": {
+                  "type": "string"
+                },
+                "tokenFile": {
+                  "type": "string"
+                },
+                "apiBaseUrl": {
+                  "type": "string"
+                },
+                "dmPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "pairing",
+                    "allowlist",
+                    "open",
+                    "disabled"
+                  ]
+                },
+                "allowFrom": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "groupPolicy": {
+                  "type": "string",
+                  "enum": [
+                    "allowlist",
+                    "open",
+                    "disabled"
+                  ]
+                },
+                "pollTimeoutSec": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 90
+                },
+                "pollLimit": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 1000
+                },
+                "webhookPublicUrl": {
+                  "type": "string",
+                  "description": "Публичный адрес шлюза, например https://oc.example.org. Задан — канал работает вебхуком, иначе опросом."
+                }
               }
             }
+          },
+          "webhookPublicUrl": {
+            "type": "string",
+            "description": "Публичный адрес шлюза, например https://oc.example.org. Задан — канал работает вебхуком, иначе опросом."
           }
         }
       },
       "uiHints": {
-        "token": { "label": "Токен бота MAX", "sensitive": true },
-        "tokenFile": { "label": "Файл с токеном (предпочтительно)" },
-        "allowFrom": { "label": "Кому разрешено писать боту (user_id)" }
+        "token": {
+          "label": "Токен бота MAX",
+          "sensitive": true
+        },
+        "tokenFile": {
+          "label": "Файл с токеном (предпочтительно)"
+        },
+        "allowFrom": {
+          "label": "Кому разрешено писать боту (user_id)"
+        },
+        "webhookPublicUrl": {
+          "label": "Публичный адрес для вебхука (без него голосовые не приходят)"
+        }
       }
     }
   }

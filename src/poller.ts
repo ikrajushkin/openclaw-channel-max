@@ -86,12 +86,13 @@ export async function runMaxPoller(params: MaxPollerParams): Promise<void> {
           continue;
         }
 
-        // Голосовые MAX присылает как message_created вообще без поля message:
-        // ни отправителя, ни чата, ни вложения. Ответить тоже некуда.
+        // Иногда message_created приходит вообще без поля message: ни
+        // отправителя, ни чата, ни вложения. Замечено на голосовых. Причина
+        // пока не установлена, поэтому печатаем событие целиком.
         if (!update.message) {
           log?.warn?.(
-            `max[${accountId}]: событие без тела сообщения — так MAX присылает` +
-              " голосовые; содержимое боту недоступно, отвечать некуда",
+            `max[${accountId}]: событие без тела сообщения: ` +
+              JSON.stringify(update).slice(0, 1000),
           );
           continue;
         }

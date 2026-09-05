@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { tryReadSecretFileSync } from "openclaw/plugin-sdk/channel-core";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 import { MAX_API_BASE_URL } from "./client.js";
@@ -18,6 +19,8 @@ type MaxSectionShape = {
   groupPolicy?: MaxGroupPolicy;
   pollTimeoutSec?: number;
   pollLimit?: number;
+  /** Публичный адрес шлюза. Задан — канал работает вебхуком, иначе опросом. */
+  webhookPublicUrl?: string;
 };
 
 type MaxRootSection = MaxSectionShape & {
@@ -37,6 +40,8 @@ export type MaxResolvedAccount = {
   groupPolicy: MaxGroupPolicy;
   pollTimeoutSec: number;
   pollLimit: number;
+  /** Публичная база для вебхука, без хвостового слеша. Пусто — работаем опросом. */
+  webhookPublicUrl: string;
 };
 
 export const DEFAULT_POLL_TIMEOUT_SEC = 30;
@@ -109,7 +114,30 @@ export function resolveMaxAccount(
     groupPolicy: pick("groupPolicy") ?? "allowlist",
     pollTimeoutSec: pick("pollTimeoutSec") ?? DEFAULT_POLL_TIMEOUT_SEC,
     pollLimit: pick("pollLimit") ?? DEFAULT_POLL_LIMIT,
+    webhookPublicUrl: (pick("webhookPublicUrl") ?? "").trim().replace(/\/+$/, ""),
   };
+}
+
+/**
+ * Секрет в пути вебхука.
+ *
+ * Выводится из токена бота, поэтому стабилен между перезапусками, не требует
+ * хранения и не угадывается тем, кто токена не знает. MAX запросы не подписывает,
+ * так что незнание пути — единственная защита от посторонних POST'ов.
+ */
+export function deriveWebhookSecret(token: string): string {
+  return createHash("sha256").update(`max-webhook:${token}`).digest("hex").slice(0, 32);
+}
+
+/** Локальный путь маршрута на шлюзе. */
+export function buildWebhookPath(accountId: string, token: string): string {
+  return `/max/webhook/${encodeURIComponent(accountId)}/${deriveWebhookSecret(token)}`;
+}
+
+/** Полный адрес, который отдаётся мессенджеру MAX. */
+export function buildWebhookUrl(account: MaxResolvedAccount, accountId: string): string {
+  if (!account.webhookPublicUrl || !account.token) return "";
+  return account.webhookPublicUrl + buildWebhookPath(accountId, account.token);
 }
 
 /** Метаданные для диагностики: без материализации секрета. */

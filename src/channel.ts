@@ -6,6 +6,7 @@ import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 import type { ChannelCapabilities } from "openclaw/plugin-sdk/channel-contract";
 import { chunkText, MaxClient } from "./client.js";
 import {
+  buildWebhookUrl,
   inspectMaxAccount,
   listMaxAccountIds,
   MAX_CHANNEL_ID,
@@ -14,6 +15,12 @@ import {
   type MaxResolvedAccount,
 } from "./config.js";
 import { runMaxPoller } from "./poller.js";
+import {
+  collectWebhookPaths,
+  registerWebhookAccount,
+  syncSubscription,
+  unregisterWebhookAccount,
+} from "./webhook.js";
 import type { MaxSendTarget } from "./types.js";
 
 /** `to` приходит как `user:<id>` / `chat:<id>` либо голым числом (диалог). */
@@ -178,12 +185,74 @@ maxChannelPlugin.gateway = {
       ctx.log?.warn?.(`max[${ctx.accountId}]: токен не задан — аккаунт не запущен`);
       return;
     }
-    await runMaxPoller({
+
+    const webhookUrl = buildWebhookUrl(ctx.account, ctx.accountId);
+    if (!webhookUrl) {
+      // Публичный адрес не задан — работаем опросом.
+      // Внимание: при опросе MAX не отдаёт содержимое голосовых сообщений.
+      await runMaxPoller({
+        cfg: ctx.cfg,
+        accountId: ctx.accountId,
+        account: ctx.account,
+        abortSignal: ctx.abortSignal,
+        log: ctx.log,
+      });
+      return;
+    }
+
+    const client = new MaxClient({
+      token: ctx.account.token,
+      baseUrl: ctx.account.apiBaseUrl,
+    });
+
+    let botUserId: number | undefined;
+    try {
+      const me = await client.getMe(ctx.abortSignal);
+      botUserId = me.user_id;
+      ctx.log?.info?.(
+        `max[${ctx.accountId}]: подключён как ${me.username ?? me.name ?? me.user_id}`,
+      );
+    } catch (err) {
+      ctx.log?.warn?.(`max[${ctx.accountId}]: /me недоступен: ${String(err)}`);
+    }
+
+    registerWebhookAccount({
       cfg: ctx.cfg,
       accountId: ctx.accountId,
       account: ctx.account,
-      abortSignal: ctx.abortSignal,
+      client,
+      botUserId,
       log: ctx.log,
     });
+
+    try {
+      await syncSubscription({
+        client,
+        account: ctx.account,
+        accountId: ctx.accountId,
+        log: ctx.log,
+        signal: ctx.abortSignal,
+      });
+    } catch (err) {
+      unregisterWebhookAccount(ctx.accountId);
+      throw new Error(`max[${ctx.accountId}]: подписка на вебхук не удалась: ${String(err)}`);
+    }
+
+    // Держим аккаунт запущенным, пока шлюз его не остановит: приём идёт
+    // через зарегистрированный HTTP-маршрут, отдельный цикл не нужен.
+    await new Promise<void>((resolve) => {
+      if (ctx.abortSignal.aborted) return resolve();
+      ctx.abortSignal.addEventListener("abort", () => resolve(), { once: true });
+    });
+    unregisterWebhookAccount(ctx.accountId);
+    ctx.log?.info?.(`max[${ctx.accountId}]: приём вебхуком остановлен`);
   },
+
+  /**
+   * Вебхук приходит снаружи без токена шлюза — путь нужно пропускать без
+   * авторизации. Секрет в самом пути выводится из токена бота и служит
+   * единственной защитой: MAX запросы не подписывает.
+   */
+  resolveGatewayAuthBypassPaths: ({ cfg }: { cfg: OpenClawConfig }) =>
+    collectWebhookPaths(cfg, listMaxAccountIds, resolveMaxAccount),
 } as typeof maxChannelPlugin.gateway;
