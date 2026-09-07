@@ -127,7 +127,6 @@ export async function handleMaxMessage(
   const media = attachments.length
     ? await downloadAttachments({
         attachments,
-        signal: params.signal,
         onError: (attachment, err) =>
           log?.warn?.(
             `max: вложение ${attachment.type} не скачалось: ${String(err)}`,
