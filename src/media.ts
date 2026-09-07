@@ -84,24 +84,3 @@ export function hasLongAudio(media: readonly DownloadedMedia[]): boolean {
       (m.maxType === "audio" || (m.contentType ?? "").startsWith("audio/")),
   );
 }
-
-/**
- * Проекция скачанного в поля контекста, которые читает ядро.
- *
- * Поля `Media*` помечены в SDK как устаревшие, но остаются рабочей
- * совместимостью; переход на `media` в полном контракте приёма — отдельная
- * задача, см. README.
- */
-export function toLegacyMediaContext(
-  media: readonly DownloadedMedia[],
-): Record<string, unknown> {
-  if (media.length === 0) return {};
-  return {
-    MediaPath: media[0]?.path,
-    MediaUrl: media[0]?.url,
-    MediaType: media[0]?.contentType,
-    MediaPaths: media.map((m) => m.path),
-    MediaUrls: media.map((m) => m.url),
-    MediaTypes: media.map((m) => m.contentType ?? m.maxType),
-  };
-}

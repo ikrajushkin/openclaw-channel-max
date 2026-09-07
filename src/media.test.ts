@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasLongAudio, toLegacyMediaContext } from "./media.js";
+import { hasLongAudio } from "./media.js";
 import type { DownloadedMedia } from "./media.js";
 
 const m = (over: Partial<DownloadedMedia>): DownloadedMedia => ({
@@ -36,31 +36,5 @@ describe("предупреждение о длинной записи", () => {
 
   it("пустой список — ничего не требует", () => {
     expect(hasLongAudio([])).toBe(false);
-  });
-});
-
-describe("проекция медиа в контекст", () => {
-  it("без вложений поля не появляются", () => {
-    expect(toLegacyMediaContext([])).toEqual({});
-  });
-
-  it("первое вложение дублируется в одиночные поля", () => {
-    const ctx = toLegacyMediaContext([m({ path: "/tmp/one.ogg" })]);
-    expect(ctx.MediaPath).toBe("/tmp/one.ogg");
-    expect(ctx.MediaPaths).toEqual(["/tmp/one.ogg"]);
-  });
-
-  it("порядок вложений сохраняется", () => {
-    const ctx = toLegacyMediaContext([
-      m({ path: "/tmp/1.ogg" }),
-      m({ path: "/tmp/2.pdf", contentType: "application/pdf", maxType: "file" }),
-    ]);
-    expect(ctx.MediaPaths).toEqual(["/tmp/1.ogg", "/tmp/2.pdf"]);
-    expect(ctx.MediaTypes).toEqual(["audio/ogg", "application/pdf"]);
-  });
-
-  it("при отсутствии типа берётся тип вложения из MAX", () => {
-    const ctx = toLegacyMediaContext([m({ contentType: undefined, maxType: "audio" })]);
-    expect(ctx.MediaTypes).toEqual(["audio"]);
   });
 });

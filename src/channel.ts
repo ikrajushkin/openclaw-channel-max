@@ -17,6 +17,7 @@ import {
 import { runMaxPoller } from "./poller.js";
 import {
   collectWebhookPaths,
+  drainWebhookQueue,
   registerWebhookAccount,
   syncSubscription,
   unregisterWebhookAccount,
@@ -238,11 +239,12 @@ maxChannelPlugin.gateway = {
       throw new Error(`max[${ctx.accountId}]: подписка на вебхук не удалась: ${String(err)}`);
     }
 
-    // Держим аккаунт запущенным, пока шлюз его не остановит: приём идёт
-    // через зарегистрированный HTTP-маршрут, отдельный цикл не нужен.
-    await new Promise<void>((resolve) => {
-      if (ctx.abortSignal.aborted) return resolve();
-      ctx.abortSignal.addEventListener("abort", () => resolve(), { once: true });
+    // Разбираем очередь здесь, а не в обработчике запроса: контекст аккаунта
+    // живёт всё время работы канала, и запуск агента из него проходит. Из
+    // контекста HTTP-запроса — нет, см. комментарий в webhook.ts.
+    await drainWebhookQueue({
+      accountId: ctx.accountId,
+      abortSignal: ctx.abortSignal,
     });
     unregisterWebhookAccount(ctx.accountId);
     ctx.log?.info?.(`max[${ctx.accountId}]: приём вебхуком остановлен`);

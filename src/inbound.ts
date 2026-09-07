@@ -1,9 +1,8 @@
-import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/channel-inbound";
 import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
+import { dispatchMaxTurn } from "./dispatch.js";
 import { chunkText, MaxClient } from "./client.js";
 import { MAX_CHANNEL_ID, type MaxResolvedAccount } from "./config.js";
-import { downloadAttachments, hasLongAudio, toLegacyMediaContext } from "./media.js";
-import { getMaxRuntime } from "./runtime-store.js";
+import { downloadAttachments, hasLongAudio } from "./media.js";
 import type { MaxSendTarget, MaxUpdate } from "./types.js";
 
 export type MaxInboundLog = {
@@ -177,41 +176,21 @@ export async function handleMaxMessage(
     }
   }
 
-  await dispatchInboundDirectDmWithRuntime({
-    runtime: getMaxRuntime(),
+  await dispatchMaxTurn({
     cfg,
-    channel: MAX_CHANNEL_ID,
-    channelLabel: "MAX",
     accountId,
-    peer: { kind: "direct", id: senderId },
+    client,
+    update,
+    target,
     senderId,
-    senderAddress: senderId,
-    recipientAddress: params.botUserId ? String(params.botUserId) : accountId,
-    conversationLabel: senderLabel(update),
-    rawBody: text,
+    senderLabel: senderLabel(update),
+    botUserId: params.botUserId,
+    text,
+    media,
     messageId: mid,
     timestamp: message.timestamp ?? update.timestamp,
-    inboundAccessAuthorized: true,
-    channelIngress: "unsupported",
-    extraContext: toLegacyMediaContext(media),
-    deliver: async (payload) => {
-      const outText = payload.text?.trim();
-      if (!outText) return;
-      for (const chunk of chunkText(outText)) {
-        await client.sendText({
-          target,
-          text: chunk,
-          signal: params.signal,
-        });
-      }
-    },
-    onRecordError: (err) => {
-      log?.error?.(`max: не удалось записать сессию: ${String(err)}`);
-    },
-    onDispatchError: (err, info) => {
-      log?.error?.(`max: ошибка обработки (${info.kind}): ${String(err)}`);
-    },
+    log,
+    signal: params.signal,
   });
-
   return true;
 }

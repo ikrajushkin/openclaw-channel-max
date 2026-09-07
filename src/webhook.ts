@@ -11,6 +11,9 @@ const SEEN_MID_LIMIT = 2000;
 /** Тело запроса больше этого отбрасываем не читая — простая защита от мусора. */
 const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
+/** Сколько событий готовы держать, пока агент занят предыдущим. */
+const QUEUE_LIMIT = 100;
+
 type AccountRuntime = {
   cfg: OpenClawConfig;
   accountId: string;
@@ -19,6 +22,10 @@ type AccountRuntime = {
   botUserId?: number;
   log?: MaxInboundLog;
   seen: Set<string>;
+  /** Принятые, но ещё не разобранные события. */
+  queue: MaxUpdate[];
+  /** Будим цикл разбора, когда очередь пополнилась. */
+  wake?: () => void;
 };
 
 /**
@@ -29,8 +36,10 @@ type AccountRuntime = {
  */
 const accounts = new Map<string, AccountRuntime>();
 
-export function registerWebhookAccount(rt: Omit<AccountRuntime, "seen">): void {
-  accounts.set(rt.accountId, { ...rt, seen: new Set() });
+export function registerWebhookAccount(
+  rt: Omit<AccountRuntime, "seen" | "queue" | "wake">,
+): void {
+  accounts.set(rt.accountId, { ...rt, seen: new Set(), queue: [] });
 }
 
 export function unregisterWebhookAccount(accountId: string): void {
@@ -91,10 +100,13 @@ function rememberMid(rt: AccountRuntime, mid: string): boolean {
 /**
  * Обработчик входящего вебхука.
  *
- * Разбор доводится до конца ДО ответа мессенджеру. Отвечать раньше нельзя:
- * с закрытием ответа рушится область выполнения запроса, и запуск агента
- * отклоняется с GatewayDrainingError. Плата — MAX ждёт всё время работы
- * агента; от повторной доставки по таймауту защищает дедуп по mid.
+ * Событие кладётся в очередь аккаунта, и мессенджеру сразу отвечаем 200.
+ * Разбирает очередь цикл, живущий в контексте аккаунта, — это принципиально:
+ * ядро помечает HTTP-запрос как «корневую работу» в AsyncLocalStorage и
+ * освобождает её, когда обработчик завершился. Фоновая задача, запущенная
+ * прямо из обработчика, остаётся в том же контексте, видит его освобождённым
+ * и получает GatewayDrainingError. Контекст аккаунта живёт всё время работы
+ * канала, поэтому из него запуск агента проходит.
  */
 export function createWebhookHandler(accountId: string) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<boolean> => {
@@ -121,17 +133,71 @@ export function createWebhookHandler(accountId: string) {
       return true;
     }
 
-    try {
-      await processUpdate(rt, update);
-    } catch (err) {
-      rt.log?.error?.(`max[${accountId}]: обработка вебхука упала: ${String(err)}`);
-    }
+    enqueueUpdate(rt, update);
 
     res.statusCode = 200;
     res.setHeader("content-type", "application/json");
     res.end('{"ok":true}');
     return true;
   };
+}
+
+/**
+ * Поставить событие в очередь.
+ *
+ * Дедуп делаем здесь, а не при разборе: MAX присылает повтор, пока ждёт
+ * ответа, и дубль не должен даже занимать место в очереди.
+ */
+function enqueueUpdate(rt: AccountRuntime, update: MaxUpdate): void {
+  const mid = update.message?.body?.mid;
+  if (mid && !rememberMid(rt, mid)) {
+    rt.log?.info?.(`max[${rt.accountId}]: повторная доставка ${mid}, пропуск`);
+    return;
+  }
+  if (rt.queue.length >= QUEUE_LIMIT) {
+    rt.log?.warn?.(
+      `max[${rt.accountId}]: очередь переполнена (${QUEUE_LIMIT}), событие отброшено`,
+    );
+    return;
+  }
+  rt.queue.push(update);
+  rt.wake?.();
+}
+
+/**
+ * Разбирать очередь, пока аккаунт запущен.
+ *
+ * Строго по одному: параллельный запуск агента на два сообщения из одного
+ * диалога перемешал бы ответы.
+ */
+export async function drainWebhookQueue(params: {
+  accountId: string;
+  abortSignal: AbortSignal;
+}): Promise<void> {
+  const { accountId, abortSignal } = params;
+  while (!abortSignal.aborted) {
+    const rt = accounts.get(accountId);
+    if (!rt) break;
+
+    const update = rt.queue.shift();
+    if (!update) {
+      await new Promise<void>((resolve) => {
+        rt.wake = resolve;
+        if (abortSignal.aborted) return resolve();
+        abortSignal.addEventListener("abort", () => resolve(), { once: true });
+      });
+      rt.wake = undefined;
+      continue;
+    }
+
+    try {
+      await processUpdate(rt, update);
+    } catch (err) {
+      rt.log?.error?.(
+        `max[${accountId}]: обработка события упала: ${String(err)}`,
+      );
+    }
+  }
 }
 
 async function processUpdate(rt: AccountRuntime, update: MaxUpdate): Promise<void> {
@@ -146,12 +212,6 @@ async function processUpdate(rt: AccountRuntime, update: MaxUpdate): Promise<voi
       `max[${rt.accountId}]: вебхук прислал событие без тела: ` +
         JSON.stringify(update).slice(0, 500),
     );
-    return;
-  }
-
-  const mid = update.message.body?.mid;
-  if (mid && !rememberMid(rt, mid)) {
-    rt.log?.info?.(`max[${rt.accountId}]: повторная доставка ${mid}, пропуск`);
     return;
   }
 
