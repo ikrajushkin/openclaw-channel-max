@@ -12,6 +12,7 @@ export type DownloadedMedia = {
   url: string;
   contentType?: string;
   fileName?: string;
+  size: number;
   /** Тип вложения так, как его назвал MAX: image, file, audio, video. */
   maxType: string;
 };
@@ -47,6 +48,7 @@ export async function downloadAttachment(params: {
     url,
     contentType: saved.contentType,
     fileName: saved.fileName ?? params.attachment.filename,
+    size: saved.size,
     maxType: params.attachment.type,
   };
 }
@@ -66,6 +68,21 @@ export async function downloadAttachments(params: {
     }
   }
   return out;
+}
+
+/**
+ * Аудио примерно такого размера распознаётся дольше, чем человек готов ждать
+ * молча: при типичном битрейте Opus это минуты полторы записи и более.
+ */
+const LONG_AUDIO_BYTES = 300 * 1024;
+
+/** Есть ли среди вложений длинная запись, о которой стоит предупредить. */
+export function hasLongAudio(media: readonly DownloadedMedia[]): boolean {
+  return media.some(
+    (m) =>
+      m.size > LONG_AUDIO_BYTES &&
+      (m.maxType === "audio" || (m.contentType ?? "").startsWith("audio/")),
+  );
 }
 
 /**

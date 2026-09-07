@@ -2,7 +2,7 @@ import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/channel-
 import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 import { chunkText, MaxClient } from "./client.js";
 import { MAX_CHANNEL_ID, type MaxResolvedAccount } from "./config.js";
-import { downloadAttachments, toLegacyMediaContext } from "./media.js";
+import { downloadAttachments, hasLongAudio, toLegacyMediaContext } from "./media.js";
 import { getMaxRuntime } from "./runtime-store.js";
 import type { MaxSendTarget, MaxUpdate } from "./types.js";
 
@@ -99,7 +99,17 @@ export async function handleMaxMessage(
   const attachments = message.body?.attachments ?? [];
 
   if (!text && attachments.length === 0) {
-    log?.info?.(`max: пустое сообщение от ${senderId}, пропуск`);
+    // Замечено на .ogg, приложенном файлом: MAX присылает событие с пустым
+    // телом. Печатаем целиком, чтобы понять, теряется вложение или приходит
+    // отдельным событием следом.
+    log?.warn?.(
+      `max: сообщение без текста и вложений от ${senderId}: ` +
+        JSON.stringify({
+          body: message.body,
+          recipient: message.recipient,
+          timestamp: message.timestamp,
+        }).slice(0, 1200),
+    );
     return false;
   }
 
@@ -149,6 +159,22 @@ export async function handleMaxMessage(
       `max: скачано вложений ${media.length}: ` +
         media.map((m) => `${m.maxType}/${m.contentType ?? "?"}`).join(", "),
     );
+  }
+
+  // Длинную запись распознаём минуту и дольше. Без подтверждения приёма
+  // это выглядит как молчание, и человек шлёт сообщение заново.
+  if (hasLongAudio(media)) {
+    try {
+      await client.sendText({
+        target,
+        text: "Запись получена, распознаю — это займёт около минуты.",
+        signal: params.signal,
+      });
+      log?.info?.(`max: отправлено подтверждение приёма длинной записи`);
+    } catch (err) {
+      // Не смогли предупредить — не повод бросать саму работу.
+      log?.warn?.(`max: подтверждение приёма не ушло: ${String(err)}`);
+    }
   }
 
   await dispatchInboundDirectDmWithRuntime({
